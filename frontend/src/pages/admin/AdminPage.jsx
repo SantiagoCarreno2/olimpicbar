@@ -164,9 +164,6 @@ export default function AdminPage() {
   /* Sedes (compartido) */
   const [sedes, setSedes] = useState([]);
 
-  /* Panel de usuarios para accesos rápidos */
-  const [usuariosPanel, setUsuariosPanel] = useState([]);
-
   /* Seguridad */
   const [hashTexto,    setHashTexto]    = useState('');
   const [hashResult,   setHashResult]   = useState(null);
@@ -259,7 +256,6 @@ export default function AdminPage() {
   useEffect(() => {
     cargarDashboard();
     cargarSedes();
-    adminService.getUsuarios().then(({ data }) => setUsuariosPanel(data)).catch(() => {});
   }, [cargarDashboard, cargarSedes]);
   useEffect(() => { if (tab === 'usuarios') cargarUsuarios(); }, [tab]);
 
@@ -530,83 +526,42 @@ export default function AdminPage() {
 
             <div style={{ marginTop: '0.5rem' }}>
               <div style={{ fontSize: '10px', color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '1rem' }}>
-                ACCESO RÁPIDO A PANELES
+                GESTIÓN
               </div>
-
-              {(() => {
-                const sedes_ids = [...new Set(
-                  usuariosPanel
-                    .filter(u => u.activo && u.rol !== 'Administrador')
-                    .map(u => u.id_sede)
-                )];
-
-                if (!sedes_ids.length) return (
-                  <p style={{ color: 'var(--text-muted)', fontSize: '12px' }}>No hay usuarios operativos activos.</p>
-                );
-
-                return sedes_ids.map(id_sede => {
-                  const usuariosSede = usuariosPanel.filter(u => u.id_sede === id_sede && u.activo && u.rol !== 'Administrador');
-                  if (!usuariosSede.length) return null;
-                  const sedeNombre = usuariosSede[0]?.sede_nombre;
-
-                  return (
-                    <div key={id_sede} style={{ marginBottom: '1.5rem' }}>
-                      <div style={{ fontSize: '11px', color: 'var(--gold)', fontWeight: '600', letterSpacing: '0.08em', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ height: '1px', width: '20px', background: 'var(--gold-muted)' }} />
-                        {sedeNombre?.toUpperCase()}
-                        <div style={{ height: '1px', flex: 1, background: 'var(--border)' }} />
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {usuariosSede.map(u => (
-                          <button
-                            key={u.id_usuario}
-                            onClick={() => {
-                              if (u.rol === 'Mesero') navigate('/mesero');
-                              if (u.rol === 'Cajero') navigate('/cajero');
-                            }}
-                            style={{
-                              padding: '8px 14px',
-                              borderRadius: '8px',
-                              border: '1px solid var(--border)',
-                              background: 'var(--bg-card)',
-                              color: 'var(--text-secondary)',
-                              fontSize: '12px',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                            }}
-                            onMouseEnter={e => {
-                              e.currentTarget.style.borderColor = u.rol === 'Mesero' ? 'var(--gold-muted)' : 'var(--success)';
-                              e.currentTarget.style.color = 'var(--text-primary)';
-                            }}
-                            onMouseLeave={e => {
-                              e.currentTarget.style.borderColor = 'var(--border)';
-                              e.currentTarget.style.color = 'var(--text-secondary)';
-                            }}
-                          >
-                            <div style={{
-                              width: '24px', height: '24px', borderRadius: '50%',
-                              background: u.rol === 'Mesero' ? 'rgba(201,168,76,0.2)' : 'rgba(74,155,111,0.2)',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: '11px', fontWeight: '700',
-                              color: u.rol === 'Mesero' ? 'var(--gold)' : 'var(--success)',
-                            }}>
-                              {u.nombre?.charAt(0) || u.username?.charAt(0)}
-                            </div>
-                            <div style={{ textAlign: 'left' }}>
-                              <div style={{ fontSize: '12px', fontWeight: '500', lineHeight: 1.2 }}>{u.username}</div>
-                              <div style={{ fontSize: '10px', color: u.rol === 'Mesero' ? 'var(--gold)' : 'var(--success)', lineHeight: 1 }}>{u.rol}</div>
-                            </div>
-                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginLeft: '4px' }}>→</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {[
+                  { label: 'Gestionar Usuarios', desc: 'Crear, activar y resetear accesos', action: () => setTab('usuarios') },
+                  { label: 'Gestionar QR',        desc: 'Generar códigos QR por mesa',      action: () => navigate('/admin/qr') },
+                  { label: 'Gestionar Productos', desc: 'Catálogo, precios e inventario',   action: () => navigate('/admin/productos') },
+                ].map(({ label, desc, action }) => (
+                  <button
+                    key={label}
+                    onClick={action}
+                    style={{
+                      padding: '12px 16px',
+                      borderRadius: '8px',
+                      border: '1px solid var(--border)',
+                      background: 'var(--bg-card)',
+                      color: 'var(--text-secondary)',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.borderColor = 'var(--gold-muted)';
+                      e.currentTarget.style.color = 'var(--text-primary)';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.borderColor = 'var(--border)';
+                      e.currentTarget.style.color = 'var(--text-secondary)';
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: '2px' }}>{label}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{desc}</div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
