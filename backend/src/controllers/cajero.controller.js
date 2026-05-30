@@ -9,15 +9,25 @@ const getCuentasAbiertas = async (req, res) => {
       `SELECT
          m.id_mesa, m.numero,
          s.id_sesion, s.fecha_inicio,
-         COUNT(DISTINCT c.id_cliente)                                                                         AS total_comensales,
-         GROUP_CONCAT(DISTINCT c.nombre_visible ORDER BY c.id_cliente SEPARATOR ', ')                        AS nombres_preview,
-         SUM(CASE WHEN dp.estado IN ('Pendiente','Alistando') THEN 1 ELSE 0 END)                             AS items_activos,
-         COALESCE(SUM(CASE WHEN dp.estado = 'Entregado' THEN dp.precio_unitario * dp.cantidad ELSE 0 END), 0) AS total_entregado
+         COUNT(DISTINCT c.id_cliente) AS total_comensales,
+         GROUP_CONCAT(DISTINCT c.nombre_visible ORDER BY c.id_cliente SEPARATOR ', ') AS nombres_preview,
+         (
+           SELECT COALESCE(SUM(dp2.precio_unitario * dp2.cantidad), 0)
+           FROM pedido p2
+           JOIN detalle_pedido dp2 ON dp2.id_pedido = p2.id_pedido
+           WHERE p2.id_sesion = s.id_sesion
+             AND dp2.estado = 'Entregado'
+         ) AS total_entregado,
+         (
+           SELECT COUNT(*)
+           FROM pedido p2
+           JOIN detalle_pedido dp2 ON dp2.id_pedido = p2.id_pedido
+           WHERE p2.id_sesion = s.id_sesion
+             AND dp2.estado IN ('Pendiente', 'Alistando')
+         ) AS items_activos
        FROM mesa m
-       JOIN sesion_mesa s  ON s.id_mesa   = m.id_mesa   AND s.estado  = 'Activa'
-       JOIN cliente c      ON c.id_sesion  = s.id_sesion
-       JOIN pedido p       ON p.id_sesion  = s.id_sesion AND p.estado  = 'Activo'
-       JOIN detalle_pedido dp ON dp.id_pedido = p.id_pedido AND dp.estado != 'Cancelado'
+       JOIN sesion_mesa s ON s.id_mesa = m.id_mesa AND s.estado = 'Activa'
+       JOIN cliente c ON c.id_sesion = s.id_sesion
        WHERE m.id_sede = ? AND m.estado = 'Ocupada'
        GROUP BY m.id_mesa, m.numero, s.id_sesion, s.fecha_inicio
        ORDER BY total_entregado DESC`,
