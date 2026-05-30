@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { qrService } from '../../services/sesionService';
+import { adminService } from '../../services/adminService';
 
 function QRModal({ data, onClose }) {
   return (
@@ -58,34 +59,52 @@ function QRModal({ data, onClose }) {
 }
 
 export default function QRPage() {
-  const [mesas,     setMesas]     = useState([]);
-  const [loading,   setLoading]   = useState(true);
-  const [modal,     setModal]     = useState(null);
-  const [generando, setGenerando] = useState(null);
+  const [mesas,       setMesas]       = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [modal,       setModal]       = useState(null);
+  const [generando,   setGenerando]   = useState(null);
+  const [sedes,       setSedes]       = useState([]);
+  const [sedeActiva,  setSedeActiva]  = useState(null);
 
+  /* Carga sedes al montar y selecciona la primera */
   useEffect(() => {
-    qrService.getMesas()
-      .then(({ data }) => setMesas(data))
-      .catch(console.error)
-      .finally(() => setLoading(false));
+    adminService.getSedes().then(({ data }) => {
+      setSedes(data);
+      if (data.length > 0) setSedeActiva(data[0].id_sede);
+    }).catch(() => {});
   }, []);
+
+  /* Recarga mesas cuando cambia la sede activa */
+  useEffect(() => {
+    if (sedeActiva) cargarMesas(sedeActiva);
+  }, [sedeActiva]);
+
+  const cargarMesas = async (sedeId) => {
+    setLoading(true);
+    try {
+      const { data } = await qrService.getMesas(sedeId);
+      setMesas(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleGenerar = async (id_mesa) => {
     setGenerando(id_mesa);
     try {
       const { data } = await qrService.generarQR(id_mesa);
       setModal(data);
-      setMesas(prev => prev.map(m =>
-        m.id_mesa === id_mesa
-          ? { ...m, qr_codigo: data.qr_codigo, qr_activo: 1 }
-          : m
-      ));
+      await cargarMesas(sedeActiva);
     } catch (err) {
       alert(err.response?.data?.error || 'Error al generar QR');
     } finally {
       setGenerando(null);
     }
   };
+
+  const sedeNombreActiva = sedes.find(s => s.id_sede === sedeActiva)?.nombre || '';
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)', display: 'flex', flexDirection: 'column' }}>
@@ -96,10 +115,42 @@ export default function QRPage() {
           <div>
             <p style={{ color: 'var(--text-muted)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 600, margin: 0 }}>Administración</p>
             <h1 className="font-display" style={{ color: 'var(--text-primary)', fontSize: 22, fontWeight: 700, margin: 0 }}>Gestión de QR</h1>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              {sedeNombreActiva} · {mesas.length} mesas
+            </div>
           </div>
           <Link to="/dashboard" className="btn-ghost" style={{ fontSize: 13 }}>← Volver</Link>
         </div>
       </header>
+
+      {/* Selector de sede */}
+      <div style={{ maxWidth: 896, width: '100%', margin: '0 auto', padding: '1.25rem 1.5rem', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          Sede:
+        </span>
+        {sedes.map(sede => {
+          const activa = sedeActiva === sede.id_sede;
+          return (
+            <button
+              key={sede.id_sede}
+              onClick={() => setSedeActiva(sede.id_sede)}
+              style={{
+                padding: '8px 18px',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: activa ? 600 : 400,
+                border: `1px solid ${activa ? 'var(--gold)' : 'var(--border)'}`,
+                background: activa ? 'rgba(201,168,76,0.1)' : 'var(--bg-card)',
+                color: activa ? 'var(--gold)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              {sede.nombre}
+            </button>
+          );
+        })}
+      </div>
 
       <main style={{ flex: 1, maxWidth: 896, width: '100%', margin: '0 auto', padding: '1.5rem' }}>
         {loading ? (
@@ -108,6 +159,10 @@ export default function QRPage() {
               <div key={i} className="skeleton" style={{ height: 144 }} />
             ))}
           </div>
+        ) : mesas.length === 0 ? (
+          <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '4rem 0', fontSize: 13 }}>
+            No hay mesas para esta sede.
+          </p>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {mesas.map(mesa => {
