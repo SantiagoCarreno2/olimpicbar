@@ -125,8 +125,12 @@ function CarritoDrawer({ carrito, onClose, onCambiarCantidad, onConfirmar, envia
 }
 
 /* ─── Drawer mis pedidos ────────────────────────────────────── */
-function PedidosDrawer({ pedidos, clienteInfo, onClose, onActualizar, actualizando }) {
+function PedidosDrawer({ pedidos: misPedidos, clienteInfo, onClose, onActualizar, actualizando }) {
   const [generandoLink, setGenerandoLink] = useState(false);
+
+  const totalPedido = misPedidos.reduce(
+    (a, item) => a + item.precio_unitario * item.cantidad, 0
+  );
 
   const compartirWhatsApp = async () => {
     setGenerandoLink(true);
@@ -141,36 +145,143 @@ function PedidosDrawer({ pedidos, clienteInfo, onClose, onActualizar, actualizan
     }
   };
 
+  const ESTADOS_LABEL = ['Recibido', 'Alistando', 'Entregado'];
+  const ESTADOS_COLOR = ['var(--warning)', '#5B9BD5', 'var(--success)'];
+
   return (
     <>
       <div className="drawer-overlay" onClick={onClose} />
       <div className="drawer">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
-          <div>
-            <p style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '2px' }}>Mis pedidos</p>
-            <h2 className="font-display" style={{ color: 'var(--text-primary)', fontSize: '20px' }}>{clienteInfo.nombre_visible}</h2>
-          </div>
-          <button onClick={onClose} style={{ color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: '6px' }}>
-            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {pedidos.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', textAlign: 'center', paddingTop: '3rem', fontSize: '13px' }}>Aún no has pedido nada.</p>
-          ) : pedidos.map(p => (
-            <div key={p.id_detalle} style={{ background: 'var(--bg-elevated)', borderRadius: '8px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.producto_nombre}</p>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '11px', marginTop: '2px' }}>x{p.cantidad} · ${Number(p.precio_unitario).toLocaleString('es-CO')}</p>
-              </div>
-              <EstadoBadge estado={p.estado} />
+        {/* Header */}
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              Mesa {clienteInfo?.numero} · Tu pedido
             </div>
-          ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--success)', fontWeight: 600 }}>
+              <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--success)', animation: 'pulse 1.5s infinite' }} />
+              En vivo
+            </div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '24px', color: 'var(--text-primary)' }}>
+              Seguimiento
+            </div>
+            <button onClick={onClose} style={{ color: 'var(--text-secondary)', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
 
+        {/* Scrollable content */}
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+
+          {/* Card resumen total */}
+          <div style={{ margin: '1rem 1.5rem', padding: '14px', background: 'var(--bg-elevated)', borderRadius: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Total del pedido</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                  {misPedidos.length} ítem(s)
+                </div>
+              </div>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                ${totalPedido.toLocaleString('es-CO')}
+              </div>
+            </div>
+          </div>
+
+          {/* Lista vacía */}
+          {misPedidos.length === 0 && (
+            <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '3rem 1.5rem', fontSize: '13px' }}>
+              Aún no has pedido nada.
+            </p>
+          )}
+
+          {/* Timeline de ítems */}
+          {misPedidos.map(item => {
+            const estadoActual = item.estado === 'Pendiente'  ? 0
+                               : item.estado === 'Alistando'  ? 1
+                               : item.estado === 'Entregado'  ? 2
+                               : -1;
+            const cancelado = item.estado === 'Cancelado';
+
+            return (
+              <div key={item.id_detalle} style={{
+                margin: '0 1.5rem 12px',
+                padding: '14px',
+                background: 'var(--bg-card)',
+                border: `1px solid ${item.estado === 'Alistando' ? 'rgba(91,155,213,0.3)' : 'var(--border)'}`,
+                borderRadius: '12px',
+              }}>
+                {/* Nombre y precio */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                    {item.producto_nombre}
+                    {item.cantidad > 1 && (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}> × {item.cantidad}</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '14px', color: 'var(--text-muted)', flexShrink: 0, marginLeft: '8px' }}>
+                    ${(item.precio_unitario * item.cantidad).toLocaleString('es-CO')}
+                  </div>
+                </div>
+
+                {/* Etiqueta de estado */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: cancelado ? 0 : '12px' }}>
+                  {cancelado ? (
+                    <span style={{ fontSize: '12px', color: 'var(--error)', fontWeight: 600 }}>✕ Cancelado</span>
+                  ) : item.estado === 'Entregado' ? (
+                    <span style={{ fontSize: '12px', color: 'var(--success)', fontWeight: 600 }}>✓ Entregado</span>
+                  ) : item.estado === 'Alistando' ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', color: '#5B9BD5', fontWeight: 600 }}>
+                      <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#5B9BD5', animation: 'pulse 1.2s infinite' }} />
+                      Alistando...
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '12px', color: 'var(--warning)', fontWeight: 600 }}>Pendiente</span>
+                  )}
+                </div>
+
+                {/* Barra de progreso timeline */}
+                {!cancelado && (
+                  <div>
+                    <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                      {[0, 1, 2].map(idx => (
+                        <div key={idx} style={{
+                          flex: 1, height: '4px', borderRadius: '2px',
+                          background: idx <= estadoActual ? ESTADOS_COLOR[idx] : 'var(--bg-elevated)',
+                          transition: 'background 0.4s ease',
+                        }} />
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      {ESTADOS_LABEL.map((est, idx) => (
+                        <span key={est} style={{
+                          fontSize: '10px',
+                          color: idx <= estadoActual ? 'var(--text-secondary)' : 'var(--text-muted)',
+                          fontWeight: idx === estadoActual ? 700 : 400,
+                        }}>
+                          {est}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Espaciado final */}
+          <div style={{ height: '1rem' }} />
+        </div>
+
+        {/* Footer */}
         <div style={{ padding: '1.25rem 1.5rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {clienteInfo.rol_mesa === 'Dueno' && (
+          {clienteInfo?.rol_mesa === 'Dueno' && (
             <button onClick={compartirWhatsApp} disabled={generandoLink} className="btn-success" style={{ width: '100%' }}>
               {generandoLink ? 'Generando enlace…' : '📲 Invitar acompañante por WhatsApp'}
             </button>
@@ -235,22 +346,6 @@ export default function MenuPage() {
     verificar();
   }, [qr_codigo]);
 
-  useWebSocket(useCallback((msg) => {
-    if (msg.tipo === 'ACTUALIZAR_MESAS') {
-      const info = JSON.parse(localStorage.getItem('cliente_info') || '{}');
-      const id_sesion = info?.id_sesion;
-      if (id_sesion) {
-        sesionService.verificarActiva(id_sesion).then(({ data }) => {
-          if (!data.activa) {
-            localStorage.removeItem('cliente_token');
-            localStorage.removeItem('cliente_info');
-            navigate('/sesion-terminada', { replace: true });
-          }
-        }).catch(() => {});
-      }
-    }
-  }, [qr_codigo]));
-
   const [productos,             setProductos]             = useState([]);
   const [categorias,            setCategorias]            = useState([]);
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(null);
@@ -260,20 +355,6 @@ export default function MenuPage() {
   const [loadingProd,           setLoadingProd]           = useState(true);
   const [enviando,              setEnviando]              = useState(false);
   const [actualizando,          setActualizando]          = useState(false);
-
-  useEffect(() => {
-    if (!clienteInfo) return;
-    Promise.all([
-      catalogoService.get(clienteInfo.id_sede),
-      catalogoService.getCategorias(),
-    ])
-      .then(([{ data: prods }, { data: cats }]) => {
-        setProductos(Array.isArray(prods) ? prods : []);
-        setCategorias(Array.isArray(cats)  ? cats  : []);
-      })
-      .catch(() => show('Error al cargar el menú', 'error'))
-      .finally(() => setLoadingProd(false));
-  }, []);
 
   const cargarPedidos = useCallback(async () => {
     setActualizando(true);
@@ -288,6 +369,37 @@ export default function MenuPage() {
   }, []);
 
   useEffect(() => { cargarPedidos(); }, [cargarPedidos]);
+
+  useWebSocket(useCallback((msg) => {
+    if (msg.tipo === 'ACTUALIZAR_MESAS') {
+      const info = JSON.parse(localStorage.getItem('cliente_info') || '{}');
+      const id_sesion = info?.id_sesion;
+      if (id_sesion) {
+        sesionService.verificarActiva(id_sesion).then(({ data }) => {
+          if (!data.activa) {
+            localStorage.removeItem('cliente_token');
+            localStorage.removeItem('cliente_info');
+            navigate('/sesion-terminada', { replace: true });
+          }
+        }).catch(() => {});
+      }
+      cargarPedidos();
+    }
+  }, [cargarPedidos, qr_codigo]));
+
+  useEffect(() => {
+    if (!clienteInfo) return;
+    Promise.all([
+      catalogoService.get(clienteInfo.id_sede),
+      catalogoService.getCategorias(),
+    ])
+      .then(([{ data: prods }, { data: cats }]) => {
+        setProductos(Array.isArray(prods) ? prods : []);
+        setCategorias(Array.isArray(cats)  ? cats  : []);
+      })
+      .catch(() => show('Error al cargar el menú', 'error'))
+      .finally(() => setLoadingProd(false));
+  }, []);
 
   const agregarAlCarrito = (producto) =>
     setCarrito(prev => {
