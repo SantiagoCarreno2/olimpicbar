@@ -155,11 +155,17 @@ export default function AdminPage() {
   const [usuarios,   setUsuarios]   = useState([]);
   const [roles,      setRoles]      = useState([]);
   const [cargandoU,  setCargandoU]  = useState(false);
-  const [modalNuevo, setModalNuevo] = useState(false);
-  const [modalReset, setModalReset] = useState(null);
-  const [formNuevo,  setFormNuevo]  = useState({ nombre: '', username: '', correo: '', password: '', id_rol: '', id_sede: '' });
-  const [formReset,  setFormReset]  = useState({ nueva: '', confirmar: '' });
-  const [enviando,   setEnviando]   = useState(false);
+  const [modalUsuario,         setModalUsuario]         = useState(false);
+  const [modoModal,            setModoModal]            = useState('crear');
+  const [usuarioEditar,        setUsuarioEditar]        = useState(null);
+  const [modalResetPwd,        setModalResetPwd]        = useState(false);
+  const [usuarioReset,         setUsuarioReset]         = useState(null);
+  const [filtroNombre,         setFiltroNombre]         = useState('');
+  const [filtroRol,            setFiltroRol]            = useState('');
+  const [filtroSedeUsuarios,   setFiltroSedeUsuarios]   = useState('');
+  const [formUsuario,          setFormUsuario]          = useState({ nombre: '', username: '', correo: '', password: '', id_rol: '', id_sede: '' });
+  const [formReset,            setFormReset]            = useState({ nueva: '', confirmar: '' });
+  const [enviando,             setEnviando]             = useState(false);
 
   /* Sedes (compartido) */
   const [sedes, setSedes] = useState([]);
@@ -277,17 +283,32 @@ export default function AdminPage() {
   }, [cargarDashboard]));
 
   /* Handlers usuarios */
-  const handleCrear = async (e) => {
+  const handleGuardar = async (e) => {
     e.preventDefault();
+    if (!formUsuario.nombre.trim())  { show('El nombre es requerido', 'error');  return; }
+    if (!formUsuario.username.trim()) { show('El username es requerido', 'error'); return; }
+    if (!formUsuario.id_rol)          { show('El rol es requerido', 'error');      return; }
+    if (!formUsuario.id_sede)         { show('La sede es requerida', 'error');     return; }
+    if (modoModal === 'crear' && (!formUsuario.password || formUsuario.password.length < 6)) {
+      show('La contraseña debe tener mínimo 6 caracteres', 'error');
+      return;
+    }
     setEnviando(true);
     try {
-      await adminService.crearUsuario(formNuevo);
-      show('Usuario creado correctamente');
-      setModalNuevo(false);
-      setFormNuevo({ nombre: '', username: '', correo: '', password: '', id_rol: '', id_sede: '' });
+      if (modoModal === 'crear') {
+        await adminService.crearUsuario(formUsuario);
+        show('Usuario creado correctamente');
+      } else {
+        const { nombre, username, correo, id_rol, id_sede } = formUsuario;
+        await adminService.actualizarUsuario(usuarioEditar.id_usuario, { nombre, username, correo, id_rol, id_sede });
+        show('Usuario actualizado correctamente');
+      }
+      setModalUsuario(false);
+      setFormUsuario({ nombre: '', username: '', correo: '', password: '', id_rol: '', id_sede: '' });
+      setUsuarioEditar(null);
       cargarUsuarios();
     } catch (err) {
-      show(err.response?.data?.error || 'Error al crear usuario', 'error');
+      show(err.response?.data?.error || 'Error al guardar usuario', 'error');
     } finally { setEnviando(false); }
   };
 
@@ -301,10 +322,12 @@ export default function AdminPage() {
   const handleReset = async (e) => {
     e.preventDefault();
     if (formReset.nueva !== formReset.confirmar) { show('Las contraseñas no coinciden', 'error'); return; }
+    if (formReset.nueva.length < 6) { show('La contraseña debe tener mínimo 6 caracteres', 'error'); return; }
     try {
-      await adminService.resetPassword(modalReset.id_usuario, formReset.nueva);
+      await adminService.resetPassword(usuarioReset.id_usuario, formReset.nueva);
       show('Contraseña reseteada correctamente');
-      setModalReset(null);
+      setModalResetPwd(false);
+      setUsuarioReset(null);
       setFormReset({ nueva: '', confirmar: '' });
     } catch (err) { show(err.response?.data?.error || 'Error', 'error'); }
   };
@@ -567,62 +590,163 @@ export default function AdminPage() {
         )}
 
         {/* ═══════════ TAB USUARIOS ═══════════ */}
-        {tab === 'usuarios' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h2 className="font-display" style={{ color: 'var(--text-primary)', fontSize: '22px', fontWeight: 700 }}>Usuarios</h2>
-              <button onClick={() => setModalNuevo(true)} className="btn-gold">+ Nuevo usuario</button>
-            </div>
+        {tab === 'usuarios' && (() => {
+          const BADGE_ROL = {
+            'Administrador': { bg: 'rgba(138,79,255,0.12)', border: 'rgba(138,79,255,0.35)', color: '#A855F7' },
+            'Mesero':        { bg: 'rgba(201,168,76,0.12)', border: 'rgba(201,168,76,0.35)', color: 'var(--gold)' },
+            'Cajero':        { bg: 'rgba(74,155,111,0.12)', border: 'rgba(74,155,111,0.35)', color: 'var(--success)' },
+          };
+          const badgeRol = (rol) => {
+            const s = BADGE_ROL[rol] ?? { bg: 'var(--bg-elevated)', border: 'var(--border)', color: 'var(--text-muted)' };
+            return (
+              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em', background: s.bg, border: `1px solid ${s.border}`, color: s.color }}>
+                {rol}
+              </span>
+            );
+          };
+          const usuariosFiltrados = usuarios.filter(u => {
+            const matchNombre = !filtroNombre ||
+              u.nombre?.toLowerCase().includes(filtroNombre.toLowerCase()) ||
+              u.username?.toLowerCase().includes(filtroNombre.toLowerCase());
+            const matchRol  = !filtroRol  || u.rol === filtroRol;
+            const matchSede = !filtroSedeUsuarios || u.id_sede === parseInt(filtroSedeUsuarios);
+            return matchNombre && matchRol && matchSede;
+          });
 
-            {cargandoU ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {[1, 2, 3, 4, 5].map(i => <div key={i} className="skeleton" style={{ height: '56px' }} />)}
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <h2 className="font-display" style={{ color: 'var(--text-primary)', fontSize: '22px', fontWeight: 700 }}>Gestión de Usuarios</h2>
+                <button
+                  onClick={() => {
+                    setModoModal('crear');
+                    setUsuarioEditar(null);
+                    setFormUsuario({ nombre: '', username: '', correo: '', password: '', id_rol: '', id_sede: '' });
+                    setModalUsuario(true);
+                  }}
+                  className="btn-gold"
+                >
+                  + Nuevo usuario
+                </button>
               </div>
-            ) : (
-              <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border)' }}>
-                <table className="table-base">
-                  <thead>
-                    <tr>
-                      {['Nombre', 'Username', 'Rol', 'Sede', 'Estado', ''].map((h, i) => (
-                        <th key={h} style={i === 5 ? { textAlign: 'right' } : {}}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {usuarios.map(u => (
-                      <tr key={u.id_usuario}>
-                        <td style={{ fontWeight: 500 }}>{u.nombre}</td>
-                        <td style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '12px' }}>{u.username}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{u.rol}</td>
-                        <td style={{ color: 'var(--text-secondary)' }}>{u.sede_nombre}</td>
-                        <td>
-                          <span className={`badge ${u.activo ? 'badge-success' : 'badge-error'}`}>
-                            {u.activo ? 'Activo' : 'Inactivo'}
-                          </span>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '8px' }}>
-                            <button
-                              onClick={() => handleToggle(u)}
-                              disabled={u.id_usuario === usuario?.id_usuario}
-                              className="btn-ghost"
-                              style={{ padding: '4px 10px', fontSize: '12px' }}
-                            >
-                              {u.activo ? 'Desactivar' : 'Activar'}
-                            </button>
-                            <button onClick={() => setModalReset(u)} className="btn-ghost" style={{ padding: '4px 10px', fontSize: '12px' }}>
-                              Reset pwd
-                            </button>
-                          </div>
-                        </td>
+
+              {/* Filtros */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '10px', alignItems: 'center' }}>
+                <input
+                  type="text"
+                  value={filtroNombre}
+                  onChange={e => setFiltroNombre(e.target.value)}
+                  placeholder="Buscar por nombre o username…"
+                  className="input-base"
+                />
+                <select value={filtroRol} onChange={e => setFiltroRol(e.target.value)} className="select-base" style={{ minWidth: '150px' }}>
+                  <option value="">Todos los roles</option>
+                  {roles.map(r => <option key={r.id_rol} value={r.nombre}>{r.nombre}</option>)}
+                </select>
+                <select value={filtroSedeUsuarios} onChange={e => setFiltroSedeUsuarios(e.target.value)} className="select-base" style={{ minWidth: '150px' }}>
+                  <option value="">Todas las sedes</option>
+                  {sedes.map(s => <option key={s.id_sede} value={s.id_sede}>{s.nombre}</option>)}
+                </select>
+              </div>
+
+              {/* Contador + limpiar */}
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span>{usuariosFiltrados.length} usuario{usuariosFiltrados.length !== 1 ? 's' : ''} encontrado{usuariosFiltrados.length !== 1 ? 's' : ''}</span>
+                {(filtroNombre || filtroRol || filtroSedeUsuarios) && (
+                  <button
+                    onClick={() => { setFiltroNombre(''); setFiltroRol(''); setFiltroSedeUsuarios(''); }}
+                    style={{ background: 'none', border: 'none', color: 'var(--gold)', cursor: 'pointer', fontSize: '12px', marginLeft: '4px', padding: 0 }}
+                  >
+                    · Limpiar filtros
+                  </button>
+                )}
+              </div>
+
+              {/* Tabla */}
+              {cargandoU ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {[1, 2, 3, 4, 5].map(i => <div key={i} className="skeleton" style={{ height: '56px' }} />)}
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  <table className="table-base">
+                    <thead>
+                      <tr>
+                        <th>Usuario</th>
+                        <th>Username</th>
+                        <th>Rol</th>
+                        <th>Sede</th>
+                        <th>Estado</th>
+                        <th style={{ textAlign: 'right' }}>Acciones</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+                    </thead>
+                    <tbody>
+                      {usuariosFiltrados.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '2rem' }}>
+                            No se encontraron usuarios con los filtros aplicados.
+                          </td>
+                        </tr>
+                      ) : usuariosFiltrados.map(u => (
+                        <tr key={u.id_usuario}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0, background: 'linear-gradient(135deg, var(--gold-muted), var(--gold))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, color: '#0A0A0A' }}>
+                                {u.nombre?.charAt(0)?.toUpperCase() || '?'}
+                              </div>
+                              <span style={{ fontWeight: 500 }}>{u.nombre}</span>
+                            </div>
+                          </td>
+                          <td style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--text-secondary)' }}>{u.username}</td>
+                          <td>{badgeRol(u.rol)}</td>
+                          <td style={{ color: 'var(--text-secondary)' }}>{u.sede_nombre}</td>
+                          <td>
+                            <span className={`badge ${u.activo ? 'badge-success' : 'badge-error'}`}>
+                              {u.activo ? 'Activo' : 'Inactivo'}
+                            </span>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px' }}>
+                              <button
+                                title="Editar usuario"
+                                className="btn-ghost"
+                                style={{ padding: '4px 8px', fontSize: '14px' }}
+                                onClick={() => {
+                                  setModoModal('editar');
+                                  setUsuarioEditar(u);
+                                  setFormUsuario({ nombre: u.nombre, username: u.username, correo: u.correo || '', password: '', id_rol: String(u.id_rol), id_sede: String(u.id_sede) });
+                                  setModalUsuario(true);
+                                }}
+                              >✏</button>
+                              <button
+                                title="Resetear contraseña"
+                                className="btn-ghost"
+                                style={{ padding: '4px 8px', fontSize: '14px' }}
+                                onClick={() => { setUsuarioReset(u); setFormReset({ nueva: '', confirmar: '' }); setModalResetPwd(true); }}
+                              >🔑</button>
+                              {u.id_usuario !== usuario?.id_usuario && (
+                                <button
+                                  title={u.activo ? 'Desactivar' : 'Activar'}
+                                  className="btn-ghost"
+                                  style={{ padding: '4px 8px', fontSize: '14px', color: u.activo ? 'var(--error)' : 'var(--success)' }}
+                                  onClick={() => handleToggle(u)}
+                                >
+                                  {u.activo ? '🔒' : '🔓'}
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ═══════════ TAB REPORTES ═══════════ */}
         {tab === 'reportes' && (() => {
@@ -933,50 +1057,95 @@ export default function AdminPage() {
         })()}
       </main>
 
-      {/* ═══════════ MODAL: Nuevo usuario ═══════════ */}
-      {modalNuevo && (
-        <div className="modal-overlay" onClick={() => setModalNuevo(false)}>
+      {/* ═══════════ MODAL: Crear / Editar usuario ═══════════ */}
+      {modalUsuario && (
+        <div className="modal-overlay" onClick={() => { setModalUsuario(false); setUsuarioEditar(null); }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3 className="font-display" style={{ color: 'var(--text-primary)', fontSize: '22px', fontWeight: 700, marginBottom: '20px' }}>Nuevo usuario</h3>
-            <form onSubmit={handleCrear} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h3 className="font-display" style={{ color: 'var(--text-primary)', fontSize: '22px', fontWeight: 700, margin: 0 }}>
+                {modoModal === 'crear' ? 'Nuevo usuario' : 'Editar usuario'}
+              </h3>
+              <button onClick={() => { setModalUsuario(false); setUsuarioEditar(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, fontSize: 18, lineHeight: 1 }}>✕</button>
+            </div>
+
+            {modoModal === 'editar' && (
+              <div style={{ marginBottom: '16px', padding: '10px 14px', background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.2)', borderRadius: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                Para cambiar la contraseña, usa el botón 🔑 Reset en la tabla.
+              </div>
+            )}
+
+            <form onSubmit={handleGuardar} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label className={labelCls}>Nombre completo</label>
-                <input required value={formNuevo.nombre} onChange={e => setFormNuevo(p => ({ ...p, nombre: e.target.value }))} placeholder="Ej: Juan Pérez" className="input-base" />
+                <input
+                  required
+                  value={formUsuario.nombre}
+                  onChange={e => setFormUsuario(p => ({ ...p, nombre: e.target.value }))}
+                  placeholder="Ej: Juan Pérez"
+                  className="input-base"
+                />
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelCls}>Username</label>
-                  <input required value={formNuevo.username} onChange={e => setFormNuevo(p => ({ ...p, username: e.target.value }))} placeholder="cajero01.chap" className="input-base" />
+                  <input
+                    required
+                    value={formUsuario.username}
+                    onChange={e => setFormUsuario(p => ({ ...p, username: e.target.value }))}
+                    placeholder="cajero01.chap"
+                    className="input-base"
+                  />
                 </div>
-                <div>
-                  <label className={labelCls}>Contraseña</label>
-                  <input required type="password" value={formNuevo.password} onChange={e => setFormNuevo(p => ({ ...p, password: e.target.value }))} placeholder="••••••••" className="input-base" />
-                </div>
+                {modoModal === 'crear' && (
+                  <div>
+                    <label className={labelCls}>Contraseña</label>
+                    <input
+                      required
+                      type="password"
+                      value={formUsuario.password}
+                      onChange={e => setFormUsuario(p => ({ ...p, password: e.target.value }))}
+                      placeholder="Mín. 6 caracteres"
+                      className="input-base"
+                    />
+                  </div>
+                )}
               </div>
+
               <div>
                 <label className={labelCls}>Correo <span style={{ textTransform: 'none', color: 'var(--text-muted)', fontWeight: 400 }}>(opcional)</span></label>
-                <input type="email" value={formNuevo.correo} onChange={e => setFormNuevo(p => ({ ...p, correo: e.target.value }))} placeholder="correo@ejemplo.com" className="input-base" />
+                <input
+                  type="email"
+                  value={formUsuario.correo}
+                  onChange={e => setFormUsuario(p => ({ ...p, correo: e.target.value }))}
+                  placeholder="correo@ejemplo.com"
+                  className="input-base"
+                />
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className={labelCls}>Rol</label>
-                  <select required value={formNuevo.id_rol} onChange={e => setFormNuevo(p => ({ ...p, id_rol: e.target.value }))} className="select-base">
+                  <select required value={formUsuario.id_rol} onChange={e => setFormUsuario(p => ({ ...p, id_rol: e.target.value }))} className="select-base">
                     <option value="">Seleccionar…</option>
                     {roles.map(r => <option key={r.id_rol} value={r.id_rol}>{r.nombre}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className={labelCls}>Sede</label>
-                  <select required value={formNuevo.id_sede} onChange={e => setFormNuevo(p => ({ ...p, id_sede: e.target.value }))} className="select-base">
+                  <select required value={formUsuario.id_sede} onChange={e => setFormUsuario(p => ({ ...p, id_sede: e.target.value }))} className="select-base">
                     <option value="">Seleccionar…</option>
                     {sedes.map(s => <option key={s.id_sede} value={s.id_sede}>{s.nombre}</option>)}
                   </select>
                 </div>
               </div>
+
               <div style={{ display: 'flex', gap: '12px', paddingTop: '4px' }}>
-                <button type="button" onClick={() => setModalNuevo(false)} className="btn-ghost" style={{ flex: 1 }}>Cancelar</button>
+                <button type="button" onClick={() => { setModalUsuario(false); setUsuarioEditar(null); }} className="btn-ghost" style={{ flex: 1 }}>
+                  Cancelar
+                </button>
                 <button type="submit" disabled={enviando} className="btn-gold" style={{ flex: 1 }}>
-                  {enviando ? 'Creando…' : 'Crear usuario'}
+                  {enviando ? (modoModal === 'crear' ? 'Creando…' : 'Guardando…') : (modoModal === 'crear' ? 'Crear usuario' : 'Guardar cambios')}
                 </button>
               </div>
             </form>
@@ -985,25 +1154,49 @@ export default function AdminPage() {
       )}
 
       {/* ═══════════ MODAL: Reset contraseña ═══════════ */}
-      {modalReset && (
-        <div className="modal-overlay" onClick={() => { setModalReset(null); setFormReset({ nueva: '', confirmar: '' }); }}>
-          <div className="modal" style={{ maxWidth: '380px' }} onClick={e => e.stopPropagation()}>
-            <h3 className="font-display" style={{ color: 'var(--text-primary)', fontSize: '22px', fontWeight: 700, marginBottom: '4px' }}>Reset contraseña</h3>
+      {modalResetPwd && usuarioReset && (
+        <div className="modal-overlay" onClick={() => { setModalResetPwd(false); setUsuarioReset(null); setFormReset({ nueva: '', confirmar: '' }); }}>
+          <div className="modal" style={{ maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <h3 className="font-display" style={{ color: 'var(--text-primary)', fontSize: '20px', fontWeight: 700, margin: 0 }}>
+                Resetear contraseña
+              </h3>
+              <button onClick={() => { setModalResetPwd(false); setUsuarioReset(null); setFormReset({ nueva: '', confirmar: '' }); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 4, fontSize: 18, lineHeight: 1 }}>✕</button>
+            </div>
             <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '20px' }}>
-              {modalReset.nombre} · <span style={{ fontFamily: 'monospace' }}>{modalReset.username}</span>
+              {usuarioReset.nombre} · <span style={{ fontFamily: 'monospace', color: 'var(--text-muted)' }}>{usuarioReset.username}</span>
             </p>
+
             <form onSubmit={handleReset} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label className={labelCls}>Nueva contraseña</label>
-                <input required type="password" value={formReset.nueva} onChange={e => setFormReset(p => ({ ...p, nueva: e.target.value }))} placeholder="••••••••" className="input-base" />
+                <input
+                  required
+                  type="password"
+                  value={formReset.nueva}
+                  onChange={e => setFormReset(p => ({ ...p, nueva: e.target.value }))}
+                  placeholder="Mín. 6 caracteres"
+                  className="input-base"
+                />
               </div>
               <div>
                 <label className={labelCls}>Confirmar contraseña</label>
-                <input required type="password" value={formReset.confirmar} onChange={e => setFormReset(p => ({ ...p, confirmar: e.target.value }))} placeholder="••••••••" className="input-base" />
+                <input
+                  required
+                  type="password"
+                  value={formReset.confirmar}
+                  onChange={e => setFormReset(p => ({ ...p, confirmar: e.target.value }))}
+                  placeholder="Repetir contraseña"
+                  className="input-base"
+                />
               </div>
               <div style={{ display: 'flex', gap: '12px', paddingTop: '4px' }}>
-                <button type="button" onClick={() => { setModalReset(null); setFormReset({ nueva: '', confirmar: '' }); }} className="btn-ghost" style={{ flex: 1 }}>Cancelar</button>
-                <button type="submit" className="btn-gold" style={{ flex: 1 }}>Confirmar</button>
+                <button type="button" onClick={() => { setModalResetPwd(false); setUsuarioReset(null); setFormReset({ nueva: '', confirmar: '' }); }} className="btn-ghost" style={{ flex: 1 }}>
+                  Cancelar
+                </button>
+                <button type="submit" disabled={enviando} className="btn-gold" style={{ flex: 1 }}>
+                  {enviando ? 'Reseteando…' : 'Confirmar reset'}
+                </button>
               </div>
             </form>
           </div>
